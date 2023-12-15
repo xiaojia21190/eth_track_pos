@@ -23,23 +23,33 @@ const get_transaction = async (text_data: string, priority_fee: string) => {
   const data_hex = toHex(text_data);
   const base_fee = (await client.getBlock()).baseFeePerGas || BigInt(0);
 
+  const gas_estimate = await client.estimateGas({
+    account,
+    to: account.address,
+    value: value,
+    data: data_hex
+  })
+
+
   const transaction = {
     account,
     to: account.address,
     value: value,
+    gas: gas_estimate,
     data: data_hex,
     maxFeePerGas: parseGwei(priority_fee) + base_fee,
     maxPriorityFeePerGas: parseGwei(priority_fee),
   }
   const request = await client.prepareTransactionRequest(transaction)
-  const signed_transaction = await account.signTransaction({
-    ...request,
-    chainId: client.chain.id
-  })
-  const hash  = await client.sendRawTransaction({ serializedTransaction: signed_transaction })
-  await waitForTransactionReceipt(client, {
-    hash,
-  })
+  console.log(request);
+  // const signed_transaction = await account.signTransaction({
+  //   ...request,
+  //   chainId: client.chain.id
+  // })
+  // const hash = await client.sendRawTransaction({ serializedTransaction: signed_transaction })
+  // await waitForTransactionReceipt(client, {
+  //   hash,
+  // })
 
 }
 
@@ -54,8 +64,6 @@ const main = async () => {
 
 //运行50次
 for (const [iter, index] of Array(1).entries()) {
-  console.log(iter);
-  console.log(index);
   main();
 }
 
