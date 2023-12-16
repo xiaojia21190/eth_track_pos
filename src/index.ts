@@ -1,69 +1,67 @@
-import { createPublicClient, createWalletClient, http, parseGwei, toHex } from 'viem'
+import { createPublicClient, http, parseEther, parseGwei, toHex } from 'viem'
 import { waitForTransactionReceipt } from 'viem/_types/actions/public/waitForTransactionReceipt';
-import { sendRawTransaction } from 'viem/_types/actions/wallet/sendRawTransaction';
-import { signTransaction } from 'viem/_types/actions/wallet/signTransaction';
 import { privateKeyToAccount } from 'viem/accounts';
 import { polygon } from "viem/chains";
+import config from './config';
 
-const private_key = '0x46fc7158e670840c3b41bd8333056ab6b30614726023d7a4559554ff444c01d5'
-// const recipient_address = '0xB73246B4761Be4F0E0194933f0291ad8C53DCd9b'
-const rpc_map = {
-  'mainnet': 'https://polygon-mainnet.infura.io/v3/023b357ce2254b6d980517baa9033ffb',
-}
-
-const get_transaction = async (text_data: string, priority_fee: string) => {
+const get_transaction = async (text_data: string) => {
   const client = createPublicClient({
-    key: private_key,
     chain: polygon,
-    transport: http(rpc_map.mainnet)
+    transport: http(config.rpcUrl)
   })
 
-  const account = privateKeyToAccount(private_key);
-  const value = parseGwei('0');
+  const account = privateKeyToAccount(config.privateKey as `0x${string}`);
+  const value = parseEther(config.payPrice);
   const data_hex = toHex(text_data);
-  const base_fee = (await client.getBlock()).baseFeePerGas || BigInt(0);
-
   const gas_estimate = await client.estimateGas({
     account,
     to: account.address,
     value: value,
     data: data_hex
   })
-
+  const currentGasPrice = await client.getGasPrice();
+  const gasMultiple = parseInt(String(config.increaseGas * 100))
+  const increasedGasPrice = currentGasPrice / BigInt(100) * BigInt(gasMultiple);
 
   const transaction = {
-    account,
     to: account.address,
+    // 替换为你要转账的金额
     value: value,
-    gas: gas_estimate,
+    // 十六进制数据
     data: data_hex,
-    maxFeePerGas: parseGwei(priority_fee) + base_fee,
-    maxPriorityFeePerGas: parseGwei(priority_fee),
+    // 设置 gas 价格
+    gasPrice: increasedGasPrice,
+    // 限制gasLimit，根据当前网络转账的设置，不知道设置多少的去区块浏览器看别人转账成功的是多少
+    gasLimit: gas_estimate,
   }
-  const request = await client.prepareTransactionRequest(transaction)
+
+  const request = await client.prepareTransactionRequest({
+    ...transaction,
+    account
+  })
   console.log(request);
-  // const signed_transaction = await account.signTransaction({
-  //   ...request,
-  //   chainId: client.chain.id
-  // })
-  // const hash = await client.sendRawTransaction({ serializedTransaction: signed_transaction })
-  // await waitForTransactionReceipt(client, {
-  //   hash,
-  // })
+
+  const signed_transaction = await account.signTransaction({
+    ...request,
+    chainId: client.chain.id
+  })
+  const hash = await client.sendRawTransaction({ serializedTransaction: signed_transaction })
+  await waitForTransactionReceipt(client, {
+    hash,
+  })
 
 }
 
 
 const main = async () => {
-  const priority_fee = '190';
-  const text_data = 'data:,{"a":"NextInscription","p":"oprc-20","op":"mint","tick":"anteater","amt":"100000000"}'
-  // const text_data = 'data:,{"a":"NextInscription","p":"oprc-20","op":"mint","tick":"anteater","amt":"100000000"}'
-  await get_transaction(text_data, priority_fee);
+  await get_transaction(config.tokenJson);
 }
 
 
 //运行50次
-for (const [iter, index] of Array(1).entries()) {
-  main();
+for (const [iter, index] of Array(config.repeatCount).entries()) {
+  console.log(`第${iter}次`);
+  await main();
+  await new Promise((resolve) => setTimeout(resolve, config.sleepTime));
 }
 
